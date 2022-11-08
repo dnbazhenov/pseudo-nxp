@@ -2270,7 +2270,7 @@ pseudo_exec_path(const char *filename, int search_path) {
 		return candidate;
 	}
 
-	if (!search_path || !path_segs) {
+	if (!search_path || !path_segs || strchr(filename, '/')) {
 		candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
 		/* executable or not, it's the only thing we can try */
 		pseudo_magic();
