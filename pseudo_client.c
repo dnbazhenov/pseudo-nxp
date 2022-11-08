@@ -2264,9 +2264,10 @@ static ssize_t isexecutable(const char *filename, char *buf, ssize_t bufsize)
 }
 
 const char *
-pseudo_exec_path(const char *filename, int search_path) {
-	char *s;
-	char *path = getenv("PATH");
+pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
+    const char *filename = *filenamep;
+    char *s;
+    char *path = getenv("PATH");
 	const char *candidate;
 	int i;
 	int forcechroot = 0;
