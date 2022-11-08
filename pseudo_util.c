@@ -49,6 +49,7 @@ static struct pseudo_variables pseudo_env[] = {
 	{ "PSEUDO_CHROOT_EXCEPTIONS", 24, NULL },
 	{ "PSEUDO_CHROOT_FORCED", 20, NULL },
 	{ "PSEUDO_CHROOT_XTRANSLATION", 26, NULL },
+    { "PSEUDO_CHROOT_XPREFIX", 21, NULL },
 	{ "PSEUDO_UIDS", 11, NULL },
 	{ "PSEUDO_GIDS", 11, NULL },
 	{ "PSEUDO_OPTS", 11, NULL },
