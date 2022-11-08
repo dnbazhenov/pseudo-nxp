@@ -2267,6 +2267,7 @@ pseudo_exec_path(const char *filename, int search_path) {
 	/* absolute paths just get canonicalized. */
 	if (*filename == '/') {
 		candidate = pseudo_fix_path(NULL, filename, 0, 0, NULL, 0);
+		pseudo_debug(PDBGF_CLIENT, "exec_path absolute: %s => %s\n", filename, candidate);
 		pseudo_magic();
 		return candidate;
 	}
@@ -2274,6 +2275,7 @@ pseudo_exec_path(const char *filename, int search_path) {
 	if (!search_path || !path_segs || strchr(filename, '/')) {
 		candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
 		/* executable or not, it's the only thing we can try */
+		pseudo_debug(PDBGF_CLIENT, "exec_path no PATH: %s => %s\n", filename, candidate);
 		pseudo_magic();
 		return candidate;
 	}
@@ -2301,13 +2303,14 @@ pseudo_exec_path(const char *filename, int search_path) {
 			}
 		}
 		if (candidate && !stat(candidate, &buf) && !S_ISDIR(buf.st_mode) && (buf.st_mode & 0111)) {
-			pseudo_debug(PDBGF_CLIENT | PDBGF_VERBOSE, "exec_path: %s => %s\n", filename, candidate);
+			pseudo_debug(PDBGF_CLIENT, "exec_path: %s => %s\n", filename, candidate);
 			pseudo_magic();
 			return candidate;
 		}
 	}
 	/* blind guess being as good as anything */
 	candidate = filename;
+	pseudo_debug(PDBGF_CLIENT, "exec_path guessed: %s => %s\n", filename, candidate);
 	pseudo_magic();
 	return candidate;
 }
