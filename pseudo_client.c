@@ -2231,8 +2231,9 @@ populate_path_segs(void) {
 
 const char *
 pseudo_exec_path(const char *filename, int search_path) {
+	char *s;
 	char *path = getenv("PATH");
-	char *candidate;
+	const char *candidate;
 	int i;
 	struct stat buf;
 	char aliasbuf[NAME_MAX];
@@ -2306,7 +2307,8 @@ pseudo_exec_path(const char *filename, int search_path) {
 		}
 	}
 	/* blind guess being as good as anything */
+	candidate = filename;
 	pseudo_magic();
-	return filename;
+	return candidate;
 }
 
