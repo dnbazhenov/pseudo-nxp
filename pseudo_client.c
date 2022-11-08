@@ -1552,6 +1552,17 @@ static char *patternlistmatchespath(const char *patternlist, const char *path, c
 	return foundpath;
 }
 
+static int ischrootpath(const char *basepath) {
+	if (pseudo_chroot_len && basepath &&
+		strlen(basepath) >= pseudo_chroot_len &&
+		!memcmp(basepath, pseudo_chroot, pseudo_chroot_len) &&
+		(basepath[pseudo_chroot_len] == '\0' || basepath[pseudo_chroot_len] == '/')) {
+		return 1;
+	}
+
+	return 0;
+}
+
 static char *
 base_path(int dirfd, const char *path, int leave_last) {
 	char *basepath = 0;
@@ -1589,12 +1600,8 @@ base_path(int dirfd, const char *path, int leave_last) {
 		/* if there's a chroot path, and it's the start of basepath,
 		 * flag it for pseudo_fix_path
 		 */
-		if (pseudo_chroot_len && baselen >= pseudo_chroot_len &&
-			!memcmp(basepath, pseudo_chroot, pseudo_chroot_len) &&
-			(basepath[pseudo_chroot_len] == '\0' || basepath[pseudo_chroot_len] == '/')) {
-
+		if (ischrootpath(basepath))
 			minlen = pseudo_chroot_len;
-		}
 	} else if (pseudo_chroot_len) {
 		/* "absolute" is really relative to chroot path */
 		basepath = pseudo_chroot;
