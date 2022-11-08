@@ -1603,10 +1603,20 @@ base_path(int dirfd, const char *path, int leave_last) {
 		if (ischrootpath(basepath))
 			minlen = pseudo_chroot_len;
 	} else if (pseudo_chroot_len) {
-		/* "absolute" is really relative to chroot path */
-		basepath = pseudo_chroot;
-		baselen = pseudo_chroot_len;
-		minlen = pseudo_chroot_len;
+		/* This correlates to pseudo_exec_path() but is not
+		 * identical in nature. For file access, default in
+		 * pseudo is to access chroot. So we access chroot by
+		 * default unless we have a specific exception.
+		 * Forcing something into chroot is meaningless here because
+		 * of the default to be in chroot anyway for files.
+		 */
+		if (/*patternlistmatchespath(getenv("PSEUDO_CHROOT_FORCED"), path, NULL, 0, 0) && */
+		    !patternlistmatchespath(getenv("PSEUDO_CHROOT_EXCEPTIONS"), path, NULL, 0, 0)) {
+			/* "absolute" is really relative to chroot path */
+			basepath = pseudo_chroot;
+			baselen = pseudo_chroot_len;
+			minlen = pseudo_chroot_len;
+		}
 	}
 
 	newpath = pseudo_fix_path(basepath, path, minlen, baselen, NULL, leave_last);
