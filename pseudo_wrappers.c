@@ -22,6 +22,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/statfs.h>
+#include <sys/statvfs.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <dlfcn.h>
