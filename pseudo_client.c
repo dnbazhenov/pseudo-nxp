@@ -2269,7 +2269,7 @@ pseudo_exec_path(const char *filename, int search_path) {
 	char *path = getenv("PATH");
 	const char *candidate;
 	int i;
-	struct stat buf;
+	int forcechroot = 0;
 	char aliasbuf[NAME_MAX];
 	char *xtranslation = getenv("PSEUDO_CHROOT_XTRANSLATION");
 
@@ -2298,16 +2298,37 @@ pseudo_exec_path(const char *filename, int search_path) {
 		filename = s;
 	}
 
+	/* This is tricky logic with respect to forcing elements into
+	 * chroot or keeping them host side. Default behavior of pseudo
+	 * was to use the host, so we want to use chroot only if the
+	 * user forced us to use chroot and we are not listed as chroot
+	 * exception. No exceptions specified means that only forced
+	 * files end up being in chroot
+	 */
+	if (pseudo_chroot_len &&
+	    (patternlistmatchespath(getenv("PSEUDO_CHROOT_FORCED"), filename, NULL, 0, 0) &&
+	     !patternlistmatchespath(getenv("PSEUDO_CHROOT_EXCEPTIONS"), filename, NULL, 0, 0)))
+		forcechroot = 1;
+	pseudo_debug(PDBGF_CLIENT, "pseudo_path_exec: %s %s %s\n", filename, (pseudo_chroot_len) ? "(chroot)" : "", (forcechroot) ? "(forced)" : "");
+
 	/* absolute paths just get canonicalized. */
 	if (*filename == '/') {
-		candidate = pseudo_fix_path(NULL, filename, 0, 0, NULL, 0);
+		if (forcechroot)
+			candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, filename, 0);
+		else
+			candidate = pseudo_fix_path(NULL, filename, 0, 0, NULL, 0);
+
 		pseudo_debug(PDBGF_CLIENT, "exec_path absolute: %s => %s\n", filename, candidate);
 		pseudo_magic();
 		return candidate;
 	}
 
 	if (!search_path || !path_segs || strchr(filename, '/')) {
-		candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
+		if (forcechroot)
+			candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, filename, 0);
+		else
+			candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
+
 		/* executable or not, it's the only thing we can try */
 		pseudo_debug(PDBGF_CLIENT, "exec_path no PATH: %s => %s\n", filename, candidate);
 		pseudo_magic();
@@ -2319,15 +2340,35 @@ pseudo_exec_path(const char *filename, int search_path) {
 		pseudo_debug(PDBGF_CLIENT, "exec_path: checking %s for %s\n", path, filename);
 		if (!*path || (*path == '.' && path_lens[i] == 1)) {
 			/* empty path or . is cwd */
-			candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
+			if (forcechroot)
+				candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, filename, 0);
+			else
+				candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
 			pseudo_debug(PDBGF_CLIENT, "exec_path: in cwd, got %s\n", candidate);
 		} else if (*path == '/') {
-			candidate = pseudo_fix_path(path, filename, 0, path_lens[i], NULL, 0);
+			if (forcechroot) {
+				char *dir = pseudo_root_path(__func__, __LINE__, AT_FDCWD, path, 0);
+				if (dir)
+					candidate = pseudo_fix_path(dir, filename, 0, strlen(dir), NULL, 0);
+				else {
+					pseudo_diag("couldn't allocate intermediate path.\n");
+					candidate = NULL;
+				}
+			}
+			else
+				candidate = pseudo_fix_path(path, filename, 0, path_lens[i], NULL, 0);
 			pseudo_debug(PDBGF_CLIENT, "exec_path: got %s\n", candidate);
 		} else {
 			/* oh you jerk, making me do extra work */
 			size_t len;
-			char *dir = pseudo_fix_path(pseudo_cwd, path, 0, pseudo_cwd_len, &len, 0);
+			char *dir;
+			if (forcechroot) {
+				dir = pseudo_root_path(__func__, __LINE__, AT_FDCWD, path, 0);
+				if (dir)
+					len = strlen(dir);
+			}
+			else
+				dir = pseudo_fix_path(pseudo_cwd, path, 0, pseudo_cwd_len, &len, 0);
 			if (dir) {
 				candidate = pseudo_fix_path(dir, filename, 0, len, NULL, 0);
 				pseudo_debug(PDBGF_CLIENT, "exec_path: got %s for non-absolute path\n", candidate);
@@ -2344,6 +2385,8 @@ pseudo_exec_path(const char *filename, int search_path) {
 	}
 	/* blind guess being as good as anything */
 	candidate = filename;
+	if (candidate && forcechroot)
+		candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, candidate, 0);
 	pseudo_debug(PDBGF_CLIENT, "exec_path guessed: %s => %s\n", filename, candidate);
 	pseudo_magic();
 	return candidate;
