@@ -2229,6 +2229,40 @@ populate_path_segs(void) {
 	path_lens[c] = 0;
 }
 
+/* A straightforward check if a file is likely an executable. We do not
+ * check if we can handle it with our architecture though, but that is
+ * not (or should not be) our problem.
+ * To permit script checks this function also can pull in the first <x>
+ * bytes of a file and returns how much it pulled in if so asked.
+ */
+static ssize_t isexecutable(const char *filename, char *buf, ssize_t bufsize)
+{
+	ssize_t foundexecutable = 0;
+	int fd;
+
+	fd = open(filename, O_RDONLY);
+	if (fd >= 0) {
+		struct stat filestat;
+
+		if (!fstat(fd, &filestat)) {
+			if (!S_ISDIR(filestat.st_mode) && filestat.st_mode & (S_IXUSR|S_IXGRP|S_IXOTH)) {
+				foundexecutable = 1;
+				if(buf) {
+					ssize_t readsize = read(fd, &buf[0], bufsize);
+
+					foundexecutable = (readsize < 0) ? 0 : readsize;
+
+					if (foundexecutable && foundexecutable < bufsize)
+						buf[foundexecutable] = '\0';
+				}
+			}
+		}
+		close(fd);
+	}
+
+	return foundexecutable;
+}
+
 const char *
 pseudo_exec_path(const char *filename, int search_path) {
 	char *s;
@@ -2302,7 +2336,7 @@ pseudo_exec_path(const char *filename, int search_path) {
 				candidate = NULL;
 			}
 		}
-		if (candidate && !stat(candidate, &buf) && !S_ISDIR(buf.st_mode) && (buf.st_mode & 0111)) {
+		if (candidate && isexecutable(candidate, NULL, 0)) {
 			pseudo_debug(PDBGF_CLIENT, "exec_path: %s => %s\n", filename, candidate);
 			pseudo_magic();
 			return candidate;
