@@ -29,6 +29,8 @@ char *tmpnam(char *s);
 int truncate(const char *path, off_t length);
 int utime(const char *path, const struct utimbuf *buf);
 int utimes(const char *path, const struct timeval *times);
+int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags);
+int futimens(int fd, const struct timespec times[2]);
 # needed because libc stdio does horrible things with inline asm syscalls
 FILE *fopen(const char *path, const char *mode); /* noignore_path=1 */
 int fclose(FILE *fp);  /* noignore_path=1 */
