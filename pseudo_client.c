@@ -2235,6 +2235,8 @@ pseudo_exec_path(const char *filename, int search_path) {
 	char *candidate;
 	int i;
 	struct stat buf;
+	char aliasbuf[NAME_MAX];
+	char *xtranslation = getenv("PSEUDO_CHROOT_XTRANSLATION");
 
 	if (!filename)
 		return NULL;
@@ -2249,6 +2251,16 @@ pseudo_exec_path(const char *filename, int search_path) {
 		free(previous_path);
 		previous_path = strdup(path);
 		populate_path_segs();
+	}
+
+	/* We check a precise path translation first and fall back to
+	 * the base name only. This permits generic aliasing of basenames
+	 */
+	s = patternlistmatchespath(xtranslation, filename, &aliasbuf[0], sizeof(aliasbuf), 1);
+	if (!s)
+		s = patternlistmatchespath(xtranslation, basename(filename), &aliasbuf[0], sizeof(aliasbuf), 1);
+	if (s) {
+		filename = s;
 	}
 
 	/* absolute paths just get canonicalized. */
