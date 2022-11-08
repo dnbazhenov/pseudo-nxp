@@ -21,7 +21,9 @@
 			*(ep--) = '\0';
 		}
 
-		if (len >= pseudo_sys_path_max()) {
+	len = pseudo_dechroot(rname, len);
+
+	if (len >= pseudo_sys_path_max()) {
 		errno = ENAMETOOLONG;
 		return NULL;
 	}
