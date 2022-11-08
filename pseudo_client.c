@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <pwd.h>
 #include <grp.h>
+#include <fnmatch.h>
 
 #ifdef PSEUDO_XATTRDB
 #include <sys/xattr.h>
@@ -1501,6 +1502,54 @@ pseudo_client_shutdown(int wait_on_socket) {
 		ack = pseudo_msg_receive(connect_fd);
 	}
 	return 0;
+}
+
+/* This function matches a PATH like exception list to the paths we use.
+ * NOTE: It has a length limit on any individual pattern!
+ */
+static char *patternlistmatchespath(const char *patternlist, const char *path, char *resbuf, size_t resbuflen, int checkalias)
+{
+	char *foundpath = NULL, *res;
+
+	/* For backwards compatibility, no patternlist means that
+	 * anything matches. THis is different from an empty list!
+	 */
+	if (patternlist && path) {
+		char patternbuf[NAME_MAX];
+		const char *s = patternlist;
+		size_t i,j;
+
+		if (!resbuf) {
+			resbuf = &patternbuf[0];
+			resbuflen = sizeof(patternbuf);
+		}
+
+		while (*s) {
+			s += strspn(s, ":");
+			i = strcspn(s, ":");
+			if (i && i < resbuflen) {
+				strncpy(resbuf, s, i);
+				resbuf[i] = 0;
+				res = &resbuf[0];
+				if(checkalias) {
+					j = strcspn(resbuf, "=");
+					if (j) {
+						resbuf[j++] = '\0';
+						res = &resbuf[j];
+					}
+					else
+						res = NULL;
+				}
+				if(fnmatch(resbuf, path, 0) == 0) {
+					foundpath = res;
+					break;
+				}
+			}
+			s += i;
+		}
+	}
+
+	return foundpath;
 }
 
 static char *
