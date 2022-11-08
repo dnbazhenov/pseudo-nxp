@@ -2604,7 +2604,7 @@ pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
 		pseudo_debug(PDBGF_CLIENT, "exec_path: checking %s for %s %s %s\n", path, filename, (forcechroot) ? "(chroot)" : "", (pforcechroot) ? "(pchroot)" : "");
 		if (!*path || (*path == '.' && path_lens[i] == 1)) {
 			/* empty path or . is cwd */
-			if (forcechroot || pforcechroot)
+			if (forcechroot)
 				candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, filename, 0);
 			else
 				candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0, readlink_chroot);
@@ -2626,7 +2626,7 @@ pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
 			/* oh you jerk, making me do extra work */
 			size_t len;
 			char *dir;
-			if (forcechroot) {
+			if (forcechroot || pforcechroot) {
 				dir = pseudo_root_path(__func__, __LINE__, AT_FDCWD, path, 0);
 				if (dir)
 					len = strlen(dir);
@@ -2668,7 +2668,7 @@ pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
 	candidate = filename;
 	if (candidate && forcechroot)
 		candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, candidate, 0);
-		if (pseudo_chroot_len) {
+	if (pseudo_chroot_len) {
 		checkscript = exec_chroot_scriptcheck(filenamep, argvp, filename, candidate);
 		if (checkscript) {
 			pseudo_magic();
