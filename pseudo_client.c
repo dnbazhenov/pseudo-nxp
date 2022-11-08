@@ -1552,8 +1552,8 @@ static char *patternlistmatchespath(const char *patternlist, const char *path, c
 	return foundpath;
 }
 
-static int ischrootpath(const char *basepath) {
-	if (pseudo_chroot_len && basepath &&
+int ischrootpath(const char *basepath) {
+    if (pseudo_chroot_len && basepath &&
 		strlen(basepath) >= pseudo_chroot_len &&
 		!memcmp(basepath, pseudo_chroot, pseudo_chroot_len) &&
 		(basepath[pseudo_chroot_len] == '\0' || basepath[pseudo_chroot_len] == '/')) {
@@ -1561,6 +1561,29 @@ static int ischrootpath(const char *basepath) {
 	}
 
 	return 0;
+}
+
+static ssize_t
+readlink_chroot(const char *path, char *buf, size_t bufsiz) {
+	ssize_t linklen;
+
+	pseudo_debug(PDBGF_CHROOT, "readlink_chroot(%s,...)\n", path);
+	linklen = readlink(path, buf, bufsiz);
+	/* symlinks within a chroot environment should be treated as such
+	 * and need to be converted back into a full path if absolute! */
+	if (ischrootpath(path) && (linklen > 0) && (*buf == '/')) {
+		if (pseudo_chroot_len + linklen < bufsiz) {
+			memmove(buf + pseudo_chroot_len, buf, linklen);
+			memcpy(buf, pseudo_chroot, pseudo_chroot_len);
+			linklen += pseudo_chroot_len;
+		}
+		else {
+			errno = ENAMETOOLONG;
+			linklen = -1;
+		}
+	}
+
+	return(linklen);
 }
 
 static char *
@@ -1619,7 +1642,7 @@ base_path(int dirfd, const char *path, int leave_last) {
 		}
 	}
 
-	newpath = pseudo_fix_path(basepath, path, minlen, baselen, NULL, leave_last);
+	newpath = pseudo_fix_path(basepath, path, minlen, baselen, NULL, leave_last, readlink_chroot);
 	pseudo_debug(PDBGF_PATH, "base_path[%s]: %s</>%s => %s\n",
 		leave_last ? "nofollow" : "follow",
 		basepath ? basepath : "<nil>",
@@ -2532,7 +2555,7 @@ pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
 		if (forcechroot)
 			candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, filename, 0);
 		else
-			candidate = pseudo_fix_path(NULL, filename, 0, 0, NULL, 0);
+			candidate = pseudo_fix_path(NULL, filename, 0, 0, NULL, 0, readlink_chroot);
 
 		if (pseudo_chroot_len) {
 			checkscript = exec_chroot_scriptcheck(filenamep, argvp, filename, candidate);
@@ -2550,7 +2573,7 @@ pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
 		if (forcechroot)
 			candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, filename, 0);
 		else
-			candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
+			candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0, readlink_chroot);
 
 		if (pseudo_chroot_len) {
 			checkscript = exec_chroot_scriptcheck(filenamep, argvp, filename, candidate);
@@ -2584,20 +2607,20 @@ pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
 			if (forcechroot || pforcechroot)
 				candidate = pseudo_root_path(__func__, __LINE__, AT_FDCWD, filename, 0);
 			else
-				candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0);
+				candidate = pseudo_fix_path(pseudo_cwd, filename, 0, pseudo_cwd_len, NULL, 0, readlink_chroot);
 			pseudo_debug(PDBGF_CLIENT, "exec_path: in cwd, got %s\n", candidate);
 		} else if (*path == '/') {
 			if (forcechroot || pforcechroot) {
 				char *dir = pseudo_root_path(__func__, __LINE__, AT_FDCWD, path, 0);
 				if (dir)
-					candidate = pseudo_fix_path(dir, filename, 0, strlen(dir), NULL, 0);
+					candidate = pseudo_fix_path(dir, filename, 0, strlen(dir), NULL, 0, readlink_chroot);
 				else {
 					pseudo_diag("couldn't allocate intermediate path.\n");
 					candidate = NULL;
 				}
 			}
 			else
-				candidate = pseudo_fix_path(path, filename, 0, path_lens[i], NULL, 0);
+				candidate = pseudo_fix_path(path, filename, 0, path_lens[i], NULL, 0, readlink_chroot);
 			pseudo_debug(PDBGF_CLIENT, "exec_path: got %s\n", candidate);
 		} else {
 			/* oh you jerk, making me do extra work */
@@ -2609,9 +2632,9 @@ pseudo_exec_path(const char **filenamep, int search_path, char * const**argvp) {
 					len = strlen(dir);
 			}
 			else
-				dir = pseudo_fix_path(pseudo_cwd, path, 0, pseudo_cwd_len, &len, 0);
+				dir = pseudo_fix_path(pseudo_cwd, path, 0, pseudo_cwd_len, &len, 0, readlink_chroot);
 			if (dir) {
-				candidate = pseudo_fix_path(dir, filename, 0, len, NULL, 0);
+				candidate = pseudo_fix_path(dir, filename, 0, len, NULL, 0, readlink_chroot);
 				pseudo_debug(PDBGF_CLIENT, "exec_path: got %s for non-absolute path\n", candidate);
 			} else {
 				pseudo_diag("couldn't allocate intermediate path.\n");

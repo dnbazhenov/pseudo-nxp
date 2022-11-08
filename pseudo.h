@@ -64,7 +64,8 @@ extern void pseudo_dump_data(char *, const void *, size_t);
 void pseudo_new_pid(void);
 /* pseudo_fix_path resolves symlinks up to this depth */
 #define PSEUDO_MAX_LINK_RECURSION 16
-extern char *pseudo_fix_path(const char *, const char *, size_t, size_t, size_t *, int);
+typedef ssize_t (*readlinkptr_t)(const char *path, char *buf, size_t bufsiz);
+extern char *pseudo_fix_path(const char *, const char *, size_t, size_t, size_t *, int, readlinkptr_t);
 extern void pseudo_dropenv(void);
 extern char **pseudo_dropenvp(char * const *);
 extern void pseudo_setupenv(void);

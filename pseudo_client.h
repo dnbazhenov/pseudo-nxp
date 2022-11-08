@@ -61,6 +61,7 @@ extern int (*pseudo_real_execv)(const char *, char * const *);
 /* support related to chroot/getcwd/etc. */
 extern int pseudo_client_getcwd(void);
 extern int pseudo_client_chroot(const char *);
+extern int ischrootpath(const char *basepath);
 extern char *pseudo_root_path(const char *, int, int, const char *, int);
 extern const char *pseudo_exec_path(const char **filenamep, int, char * const**argvp);
 #define PSEUDO_ROOT_PATH(x, y, z) pseudo_root_path(__func__, __LINE__, (x), (y), (z));

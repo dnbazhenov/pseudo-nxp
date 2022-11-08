@@ -28,6 +28,7 @@
 #include "pseudo.h"
 #include "pseudo_ipc.h"
 #include "pseudo_db.h"
+#include "pseudo_client.h"
 
 struct pseudo_variables {
 	char *key;
@@ -259,8 +260,8 @@ int pseudo_util_evlog_fd = 2;
 static int debugged_newline = 1;
 static char pid_text[32];
 static size_t pid_len;
-static int pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurrent, const char *element, size_t elen, PSEUDO_STATBUF *buf, int leave_this);
-static int pseudo_append_elements(char *newpath, char *root, size_t allocated, char **current, const char *elements, size_t elen, int leave_last, PSEUDO_STATBUF *sbuf);
+static int pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurrent, const char *element, size_t elen, PSEUDO_STATBUF *buf, int leave_this, readlinkptr_t readlinkp);
+static int pseudo_append_elements(char *newpath, char *root, size_t allocated, char **current, const char *elements, size_t elen, int leave_last, PSEUDO_STATBUF *buf, readlinkptr_t readlinkp);
 extern char **environ;
 static ssize_t pseudo_max_pathlen = -1;
 static ssize_t pseudo_sys_max_pathlen = -1;
@@ -612,7 +613,7 @@ pseudo_new_pid() {
  * the symlink, appending each element in turn the same way.
  */
 static int
-pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurrent, const char *element, size_t elen, PSEUDO_STATBUF *buf, int leave_this) {
+pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurrent, const char *element, size_t elen, PSEUDO_STATBUF *buf, int leave_this, readlinkptr_t readlinkp) {
 	static int link_recursion = 0;
 	size_t curlen;
 	int is_dir = S_ISDIR(buf->st_mode);
@@ -680,7 +681,7 @@ pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurre
 	 * were appending to. we don't want to actually try to do this when
 	 * we're appending names to a regular file.
 	 */
-	if (!leave_this && is_dir) {
+	if ( (!(leave_this & AT_SYMLINK_NOFOLLOW)) && is_dir) {
 		int is_link = S_ISLNK(buf->st_mode);
 		if (link_recursion >= PSEUDO_MAX_LINK_RECURSION && is_link) {
 			pseudo_debug(PDBGF_PATH, "link recursion too deep, not expanding path '%s'.\n", newpath);
@@ -691,7 +692,7 @@ pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurre
 			ssize_t linklen;
 			int retval;
 
-			linklen = readlink(newpath, linkbuf, pseudo_path_max());
+			linklen = (*readlinkp)(newpath, linkbuf, pseudo_path_max());
 			if (linklen == -1) {
 				pseudo_debug(PDBGF_PATH, "uh-oh!  '%s' seems to be a symlink, but I can't read it.  Ignoring.\n", newpath);
 				*pcurrent = current;
@@ -717,7 +718,7 @@ pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurre
 			buf->st_mode = S_IFDIR;
 			/* append all the elements in series */
 			++link_recursion;
-			retval = pseudo_append_elements(newpath, root, allocated, pcurrent, linkbuf, linklen, 0, buf);
+			retval = pseudo_append_elements(newpath, root, allocated, pcurrent, linkbuf, linklen, 0, buf, readlinkp);
 			--link_recursion;
 			return retval;
 		}
@@ -730,7 +731,7 @@ pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurre
 }
 
 static int
-pseudo_append_elements(char *newpath, char *root, size_t allocated, char **current, const char *path, size_t elen, int leave_last, PSEUDO_STATBUF *sbuf) {
+pseudo_append_elements(char *newpath, char *root, size_t allocated, char **current, const char *path, size_t elen, int leave_last, PSEUDO_STATBUF *sbuf, readlinkptr_t readlinkp) {
 	int retval = 1;
 	/* a shareable buffer so we can cache stat results while walking the path */
 	PSEUDO_STATBUF buf;
@@ -778,7 +779,7 @@ pseudo_append_elements(char *newpath, char *root, size_t allocated, char **curre
 		 */
 		pseudo_debug(PDBGF_PATH | PDBGF_VERBOSE, "element to add: '%.*s'\n",
 			(int) this_elen, path);
-		if (pseudo_append_element(newpath, root, allocated, current, path, this_elen, sbuf, leave_this) == -1) {
+		if (pseudo_append_element(newpath, root, allocated, current, path, this_elen, sbuf, leave_this, readlinkp) == -1) {
 			retval = -1;
 			break;
 		}
@@ -801,13 +802,15 @@ static int pathbuf = 0;
  * is that path may contain symlinks, which must be resolved.
  */
 char *
-pseudo_fix_path(const char *base, const char *path, size_t rootlen, size_t baselen, size_t *lenp, int leave_last) {
+pseudo_fix_path(const char *base, const char *path, size_t rootlen, size_t baselen, size_t *lenp, int leave_last, readlinkptr_t readlinkp) {
 	size_t newpathlen, pathlen;
 	char *newpath;
 	char *current;
 	char *effective_root;
 	int trailing_slash = 0;
 	
+	if (!readlinkp)
+		readlinkp = readlink;
 	if (!path) {
 		pseudo_diag("can't fix empty path.\n");
 		return 0;
@@ -868,7 +871,7 @@ pseudo_fix_path(const char *base, const char *path, size_t rootlen, size_t basel
 	 * (current - newpath) is the used length of newpath
 	 */
 	int save_errno = errno;
-	if (pseudo_append_elements(newpath, effective_root, newpathlen, &current, path, pathlen, leave_last, 0) != -1) {
+	if (pseudo_append_elements(newpath, effective_root, newpathlen, &current, path, pathlen, leave_last, 0, readlinkp) != -1) {
 		/* if we are expecting a trailing slash, or the path ended up being completely
 		 * empty (meaning it's pointing at either effective_root or the beginning of
 		 * the path), we need a slash here.
@@ -1268,7 +1271,7 @@ pseudo_get_prefix(char *pathname) {
 			s += snprintf(s, pseudo_path_max() - (s - mypath), "/%s",
 				pathname);
 		}
-		tmp_path = pseudo_fix_path(NULL, mypath, 0, 0, 0, AT_SYMLINK_NOFOLLOW);
+		tmp_path = pseudo_fix_path(NULL, mypath, 0, 0, 0, AT_SYMLINK_NOFOLLOW, NULL);
 		/* point s to the end of the fixed path */
 		if ((int) strlen(tmp_path) >= pseudo_path_max()) {
 			pseudo_diag("Can't expand path '%s' -- expansion exceeds %d.\n",
