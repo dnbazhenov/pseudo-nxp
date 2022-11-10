@@ -691,8 +691,9 @@ pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurre
 			char linkbuf[pseudo_path_max() + 1];
 			ssize_t linklen;
 			int retval;
+			readlinkptr_t realreadlinkp = (readlinkp) ? readlinkp : readlink;
 
-			linklen = (*readlinkp)(newpath, linkbuf, pseudo_path_max());
+			linklen = (*realreadlinkp)(newpath, linkbuf, pseudo_path_max());
 			if (linklen == -1) {
 				pseudo_debug(PDBGF_PATH, "uh-oh!  '%s' seems to be a symlink, but I can't read it.  Ignoring.\n", newpath);
 				*pcurrent = current;
@@ -702,7 +703,13 @@ pseudo_append_element(char *newpath, char *root, size_t allocated, char **pcurre
 			linkbuf[linklen] = '\0';
 			/* absolute symlink means go back to root */
 			if (*linkbuf == '/') {
-				current = root;
+				// We don't really go back to root.
+				// If we work with chroot enabled
+				// readlink functions, then we replace
+				// the full path because we know that
+				// the enabled functions return the full
+				// host path.
+				current = (readlinkp) ? newpath : root;
 			} else {
 				/* point back at the end of the previous path... */
 				current -= (elen + 1);
@@ -809,8 +816,6 @@ pseudo_fix_path(const char *base, const char *path, size_t rootlen, size_t basel
 	char *effective_root;
 	int trailing_slash = 0;
 	
-	if (!readlinkp)
-		readlinkp = readlink;
 	if (!path) {
 		pseudo_diag("can't fix empty path.\n");
 		return 0;
