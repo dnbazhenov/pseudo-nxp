@@ -839,15 +839,40 @@ pseudo_client_chroot(const char *path) {
 	return 0;
 }
 
+static char *
+fd_path(int fd) {
+	if (fd >= 0 && fd < nfds) {
+		return fd_paths[fd];
+	}
+	if (fd == AT_FDCWD) {
+		return pseudo_cwd;
+	}
+	return 0;
+}
+
 char *
 pseudo_root_path(const char *func, int line, int dirfd, const char *path, int leave_last) {
 	char *rc;
+
+	if (!path)
+		return 0;
+
 	pseudo_antimagic();
 	rc = base_path(dirfd, path, leave_last);
 	pseudo_magic();
 	if (!rc) {
-		pseudo_diag("couldn't allocate absolute path for '%s'.\n",
-			path ? path : "null");
+		/* Only print the diagnostics if we can reasonably
+		 * assume that base_path has really failed. This
+		 * needs work as we are second guessing. FIX!
+		 * The real problem is that, e.g., stdout can be probed
+		 * leading to rc==0. This later messes up __fxstatat64.c
+		 * returning an error when the path should have remained
+		 * non-0.
+		 */
+		if (path && *path && fd_path(dirfd)) {
+			pseudo_diag("couldn't allocate absolute path for '%s'.\n",
+				path ? path : "<nil>");
+		}
 	}
 	pseudo_debug(PDBGF_CHROOT, "root_path [%s, %d]: dirfd %d, '%s' from '%s'\n",
 		func, line,
@@ -890,17 +915,6 @@ pseudo_client_getcwd(void) {
 		pseudo_diag("Can't get CWD: %s\n", strerror(errno));
 		return -1;
 	}
-}
-
-static char *
-fd_path(int fd) {
-	if (fd >= 0 && fd < nfds) {
-		return fd_paths[fd];
-	}
-	if (fd == AT_FDCWD) {
-		return pseudo_cwd;
-	}
-	return 0;
 }
 
 static void
